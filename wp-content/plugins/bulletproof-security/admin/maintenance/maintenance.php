@@ -52,7 +52,7 @@ require_once( ABSPATH . 'wp-admin/includes/plugin-install.php' );
 }
 ?>
 
-<h2 style="margin-left:70px;">
+<h2 style="margin-left:220px;">
 <?php 
 if ( is_multisite() && $blog_id != 1 ) {
 _e('BulletProof Security ~ Maintenance Mode', 'bulletproof-security');
@@ -62,7 +62,7 @@ _e('Maintenance Mode ~ FrontEnd ~ BackEnd', 'bulletproof-security');
 ?>
 </h2>
 
-<div id="message" class="updated" style="border:1px solid #999999;margin-left:70px;background-color:#000;">
+<div id="message" class="updated" style="border:1px solid #999999;margin-left:220px;background-color:#000;">
 
 <?php
 // HUD - Heads Up Display - Warnings and Error messages
@@ -71,7 +71,6 @@ echo bps_hud_check_bpsbackup();
 echo bps_check_safemode();
 echo @bps_w3tc_htaccess_check($plugin_var);
 echo @bps_wpsc_htaccess_check($plugin_var);
-bps_delete_language_files();
 
 // General all purpose "Settings Saved." message for forms
 if ( current_user_can('manage_options') && wp_script_is( 'bps-accordion', $list = 'queue' ) ) {
@@ -81,20 +80,49 @@ if ( @$_GET['settings-updated'] == true ) {
 	}
 }
 
-// Preview - write a new denyall htaccess file with the user's current IP address
+// Get Real IP address - USE EXTREME CAUTION!!!
+function bpsPro_get_real_ip_address_mmode() {
+	
+	if ( is_admin() && wp_script_is( 'bps-accordion', $list = 'queue' ) && current_user_can('manage_options') ) {
+	
+		if ( isset($_SERVER['HTTP_CLIENT_IP'] ) ) {
+			$ip = esc_html($_SERVER['HTTP_CLIENT_IP']);
+			
+		} elseif ( isset( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$ip = esc_html($_SERVER['HTTP_X_FORWARDED_FOR']);
+			
+		} elseif ( isset( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = esc_html($_SERVER['REMOTE_ADDR']);
+			
+		}
+	return $ip;
+	}
+}
+
+// Preview - write a new denyall htaccess file with the user's current IP address in the /admin/htaccess/ folder
 // on Network sites if 2 users with 2 different ips are using mmode this will be a problem 
 // see what happens and then beef this function up if needed
 function bpsPro_maintenance_mode_preview_ip() {
 
 	if ( current_user_can('manage_options') ) {
 	
-	$ip = $_SERVER['REMOTE_ADDR'];
-	$denyall_htaccess_file = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/.htaccess';
+		$denyall_htaccess_file = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/.htaccess';
 	
-	if ( file_exists($denyall_htaccess_file) ) {
+		if ( file_exists($denyall_htaccess_file) ) {	
+		
+			$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');		
+		
+			if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {	
 	
-		file_put_contents( $denyall_htaccess_file, "order deny,allow\ndeny from all\nallow from $ip" );
-	}
+				$bps_denyall_content = "# BPS mod_authz_core IfModule BC\n<IfModule mod_authz_core.c>\nRequire ip ". bpsPro_get_real_ip_address_mmode()."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\n<FilesMatch \"(.*)\$\">\nOrder Allow,Deny\nAllow from ". bpsPro_get_real_ip_address_mmode()."\n</FilesMatch>\n</IfModule>\n</IfModule>";
+	
+			} else {
+		
+				$bps_denyall_content = "# BPS mod_access_compat\n<FilesMatch \"(.*)\$\">\nOrder Allow,Deny\nAllow from ". bpsPro_get_real_ip_address_mmode()."\n</FilesMatch>";		
+			}		
+		
+			file_put_contents( $denyall_htaccess_file, $bps_denyall_content );
+		}
 	}
 }
 bpsPro_maintenance_mode_preview_ip();
@@ -106,14 +134,14 @@ $bps_plugin_dir = str_replace( ABSPATH, '', WP_PLUGIN_DIR );
 // Replace ABSPATH = wp-content
 $bps_wpcontent_dir = str_replace( ABSPATH, '', WP_CONTENT_DIR );
 // Top div echo & bottom div echo
-$bps_topDiv = '<div id="message" class="updated" style="background-color:#ffffe0;font-size:1em;font-weight:bold;border:1px solid #999999; margin-left:70px;"><p>';
+$bps_topDiv = '<div id="message" class="updated" style="background-color:#ffffe0;font-size:1em;font-weight:bold;border:1px solid #999999; margin-left:220px;"><p>';
 $bps_bottomDiv = '</p></div>';
 ?>
 </div>
 
 <!-- jQuery UI Tab Menu -->
 <div id="bps-tabs" class="bps-menu">
-    <div id="bpsHead" style="position:relative; top:0px; left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.png'); ?>" style="float:left; padding:0px 8px 0px 0px; margin:-72px 0px 0px 0px;" /></div>
+    <div id="bpsHead" style="position:relative; top:0px; left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.gif'); ?>" style="float:left; padding:0px 8px 0px 0px; margin:-72px 0px 0px 0px;" /></div>
 		<ul>
 			<li><a href="#bps-tabs-1"><?php _e('Maintenance Mode', 'bulletproof-security'); ?></a></li>
             <li><a href="#bps-tabs-2"><?php _e('Help &amp; FAQ', 'bulletproof-security'); ?></a></li>
@@ -780,8 +808,11 @@ $format_error_2 = '/,[^\s]/'; // no whitespaces between commas
 	$wpadminHtaccess = ABSPATH . 'wp-admin/.htaccess';
 	$permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 	$sapi_type = php_sapi_name();
+	# BPS .52.5: new pattern|new IfModule conditions
 	$pattern2 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
-	
+	$pattern3 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP(.*\s*){8}(Allow(.*)\s*){1,}<\/IfModule>\s*<\/IfModule>\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';	
+	$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');		
+
 	if ( $MMoptions['bps_maint_ip_allowed'] != '' && $MMoptions['bps_maint_backend'] == '1' ) {
 
 		if ( @$permsHtaccess == '0404') {
@@ -803,18 +834,36 @@ $format_error_2 = '/,[^\s]/'; // no whitespaces between commas
 		$AllowFromRules = file_get_contents($MMAllowFromTXT);
 		$stringReplace = file_get_contents($wpadminHtaccess);
 				
-		if ( !preg_match( $pattern2, $stringReplace, $matches ) ) {
-				
-			$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP";	
-			file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
-				
-		} else {
-				
-			$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP", $stringReplace);	
+		if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {
 
-			file_put_contents($wpadminHtaccess, $stringReplace);		
-		}			
-		
+			if ( ! preg_match( $pattern3, $stringReplace, $matches ) ) {
+				
+				$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\n<IfModule mod_authz_core.c>\nRequire ip ".str_replace( array( ',', ", ", ",  "), "", $MMoptions['bps_maint_ip_allowed'])."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\nOrder Allow,Deny\n" . $AllowFromRules . "</IfModule>\n</IfModule>\n# END BPS MAINTENANCE MODE IP";
+				
+				file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
+				
+			} else {
+				
+				$stringReplace = preg_replace( $pattern3, "# BEGIN BPS MAINTENANCE MODE IP\n<IfModule mod_authz_core.c>\nRequire ip ".str_replace( array( ',', ", ", ",  "), "", $MMoptions['bps_maint_ip_allowed'])."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\nOrder Allow,Deny\n" . $AllowFromRules . "</IfModule>\n</IfModule>\n# END BPS MAINTENANCE MODE IP", $stringReplace);
+				
+				file_put_contents($wpadminHtaccess, $stringReplace);		
+			}				
+
+		} else { // IfModule No and any other coditions
+
+			if ( ! preg_match( $pattern2, $stringReplace, $matches ) ) {
+				
+				$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n" . $AllowFromRules . "# END BPS MAINTENANCE MODE IP";	
+				file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
+				
+			} else {
+				
+				$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n" . $AllowFromRules . "# END BPS MAINTENANCE MODE IP", $stringReplace);	
+
+				file_put_contents($wpadminHtaccess, $stringReplace);		
+			}			
+		}		
+	
 		if ( $lock == '0404') {	
 			@chmod($wpadminHtaccess, 0404);
 		}
@@ -1063,7 +1112,10 @@ $format_error_2 = '/,[^\s]/'; // no whitespaces between commas
 	$wpadminHtaccess = ABSPATH . 'wp-admin/.htaccess';
 	$permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 	$sapi_type = php_sapi_name();
+	# BPS .52.5: new pattern|new IfModule conditions
 	$pattern2 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+	$pattern3 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP(.*\s*){8}(Allow(.*)\s*){1,}<\/IfModule>\s*<\/IfModule>\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';	
+	$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');	
 	
 	if ( $MMoptions['bps_maint_ip_allowed'] != '' && $MMoptions['bps_maint_backend'] == '1' ) {
 
@@ -1086,18 +1138,36 @@ $format_error_2 = '/,[^\s]/'; // no whitespaces between commas
 		$AllowFromRules = file_get_contents($MMAllowFromTXT);
 		$stringReplace = file_get_contents($wpadminHtaccess);
 				
-		if ( !preg_match( $pattern2, $stringReplace, $matches ) ) {
-				
-			$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP";	
-			file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
-				
-		} else {
-				
-			$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP", $stringReplace);	
+		if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {
 
-			file_put_contents($wpadminHtaccess, $stringReplace);		
-		}			
-		
+			if ( ! preg_match( $pattern3, $stringReplace, $matches ) ) {
+				
+				$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\n<IfModule mod_authz_core.c>\nRequire ip ".str_replace( array( ',', ", ", ",  "), "", $MMoptions['bps_maint_ip_allowed'])."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\nOrder Allow,Deny\n" . $AllowFromRules . "</IfModule>\n</IfModule>\n# END BPS MAINTENANCE MODE IP";
+				
+				file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
+				
+			} else {
+				
+				$stringReplace = preg_replace( $pattern3, "# BEGIN BPS MAINTENANCE MODE IP\n<IfModule mod_authz_core.c>\nRequire ip ".str_replace( array( ',', ", ", ",  "), "", $MMoptions['bps_maint_ip_allowed'])."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\nOrder Allow,Deny\n" . $AllowFromRules . "</IfModule>\n</IfModule>\n# END BPS MAINTENANCE MODE IP", $stringReplace);
+				
+				file_put_contents($wpadminHtaccess, $stringReplace);		
+			}				
+
+		} else { // IfModule No and any other coditions
+
+			if ( ! preg_match( $pattern2, $stringReplace, $matches ) ) {
+				
+				$stringReplace = "\n# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP";	
+				file_put_contents($wpadminHtaccess, $stringReplace, FILE_APPEND | LOCK_EX);				
+				
+			} else {
+				
+				$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "# BEGIN BPS MAINTENANCE MODE IP\nOrder Allow,Deny\n".$AllowFromRules."# END BPS MAINTENANCE MODE IP", $stringReplace);	
+
+				file_put_contents($wpadminHtaccess, $stringReplace);		
+			}			
+		}
+
 		if ( $lock == '0404') {	
 			@chmod($wpadminHtaccess, 0404);
 		}		
@@ -1192,9 +1262,9 @@ $gwiod_pattern_ip = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*(.*)\s*#\sEND\sBPS\
 		$gwiod_permsIndex = @substr(sprintf('%o', fileperms($gwiod_root_index_file)), -4);
 		$sapi_type = php_sapi_name();
 
-		if ( !file_exists( $gwiod_root_index_file ) ) {
+		if ( ! file_exists( $gwiod_root_index_file ) ) {
 			echo $bps_topDiv;
-    		$text = '<font color="red"><strong>'.__('Error: Unable to get/find the site root index.php file for this GWIOD - Giving WordPress Its Own Directory - website.', 'bulletproof-security').'</font><br>'.__('GWIOD Site Root index.php File Path Checked: ', 'bulletproof-security').$gwiod_root_index_file.'<br>'.__('Please copy this error message and send it in an email to info@ait-pro.com for assistance.', 'bulletproof-security').'</strong>';
+    		$text = '<font color="red"><strong>'.__('Error: Unable to get/find the site root index.php file for this GWIOD - Giving WordPress Its Own Directory - website.', 'bulletproof-security').'</font><br>'.__('GWIOD Site Root index.php File Path Checked: ', 'bulletproof-security').$gwiod_root_index_file.'<br>'.__('BPS Maintenance Mode will not work correctly with your WordPress GWIOD setup. Try another WordPress Maintenance Mode plugin.', 'bulletproof-security').'</strong>';
 			echo $text;		
 			echo $bps_bottomDiv;
 		return;		
@@ -1226,7 +1296,7 @@ $gwiod_pattern_ip = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*(.*)\s*#\sEND\sBPS\
 				$gwiod_index_contents = file_get_contents($gwiod_root_index_file);
 
 				// First click Turn On: backup the WP root index.php file. Second... click Turn On: do not backup the index.php file to master-backups again
-				if ( !strpos($gwiod_index_contents, "BPS MAINTENANCE MODE IP") ) {
+				if ( ! strpos($gwiod_index_contents, "BPS MAINTENANCE MODE IP") ) {
 					copy( $gwiod_root_index_file, $gwiod_root_index_file_backup );	
 				} 
 			
@@ -1518,8 +1588,11 @@ function bpsPro_mmode_single_gwiod_turn_off_backend() {
 global $bps_topDiv, $bps_bottomDiv;
 
 $MMoptions = get_option('bulletproof_security_options_maint_mode');
+$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');
 $sapi_type = php_sapi_name();
+# BPS .52.5: new pattern|new IfModule conditions
 $pattern2 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+$pattern3 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP(.*\s*){8}(Allow(.*)\s*){1,}<\/IfModule>\s*<\/IfModule>\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
 $wpadminHtaccess = ABSPATH . 'wp-admin/.htaccess';
 $permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 
@@ -1535,27 +1608,38 @@ $permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 	
 		$stringReplace = file_get_contents($wpadminHtaccess);
 		
-		if ( preg_match( $pattern2, $stringReplace, $matches ) ) {
+		if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {
+			
+			if ( preg_match( $pattern3, $stringReplace, $matches ) ) {
 				
-			$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "", $stringReplace);	
+				$stringReplace = preg_replace( $pattern3, "", $stringReplace);				
+			}
 
-			if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
-		
-				if ( $lock == '0404') {	
-					@chmod($wpadminHtaccess, 0404);
-				}				
+		} else {
+
+			if ( preg_match( $pattern2, $stringReplace, $matches ) ) {
 				
-				echo $bps_topDiv;
-				$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
-				echo $text;
-    			echo $bps_bottomDiv;
+				$stringReplace = preg_replace( $pattern2, "", $stringReplace);
 			}
 		}			
+		
+		if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
+
+			if ( $lock == '0404') {	
+				@chmod($wpadminHtaccess, 0404);
+			}			
+			
+			echo $bps_topDiv;
+			$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
+			echo $text;
+    		echo $bps_bottomDiv;
+		}		
 	}
 }
 
 // Maintenance Mode - Turn Off - Single & GWIOD
 // non-conditional / not based on option settings so that clicking turn off again will not cause problems
+# BPS .52.5: An Apache Mod conditional check is not done here to ensure that any old previous htaccess code is removed on Turn Off.
 function bpsPro_mmode_single_gwiod_turn_off() {
 global $bps_topDiv, $bps_bottomDiv;
 
@@ -1567,7 +1651,9 @@ $root_index_file_backup = WP_CONTENT_DIR . '/bps-backup/master-backups/backup_in
 $root_folder_maintenance = ABSPATH . 'bps-maintenance.php';
 $root_folder_maintenance_values = ABSPATH . 'bps-maintenance-values.php';
 $pattern = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*(.*)\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+# BPS .52.5: new pattern|new IfModule conditions
 $pattern2 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+$pattern3 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP(.*\s*){8}(Allow(.*)\s*){1,}<\/IfModule>\s*<\/IfModule>\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
 $wpadminHtaccess = ABSPATH . 'wp-admin/.htaccess';
 $permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 
@@ -1643,25 +1729,31 @@ $permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 		
 		if ( preg_match( $pattern2, $stringReplace, $matches ) ) {
 				
-			$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "", $stringReplace);	
+			$stringReplace = preg_replace( $pattern2, "", $stringReplace );
+		}
 
-			if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
-			
-				if ( $lock == '0404') {	
-					@chmod($wpadminHtaccess, 0404);
-				}				
+		if ( preg_match( $pattern3, $stringReplace, $matches ) ) {
 				
-				echo $bps_topDiv;
-				$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
-				echo $text;
-    			echo $bps_bottomDiv;
-			}
-		}			
+			$stringReplace = preg_replace( $pattern3, "", $stringReplace );
+		}
+
+		if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
+
+			if ( $lock == '0404') {	
+				@chmod($wpadminHtaccess, 0404);
+			}		
+			
+			echo $bps_topDiv;
+			$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
+			echo $text;
+    		echo $bps_bottomDiv;
+		}	
 	}
 }
 
 // Maintenance Mode - Turn Off - Network/GWIOD
 // non-conditional / not based on option settings so that clicking turn off again will not cause problems
+# BPS .52.5: An Apache Mod conditional check is not done here to ensure that any old previous htaccess code is removed on Turn Off.
 function bpsPro_mmode_network_turn_off() {
 global $current_blog, $blog_id, $bps_topDiv, $bps_bottomDiv;
 
@@ -1674,7 +1766,9 @@ $root_folder_maintenance = ABSPATH . 'bps-maintenance.php';
 $root_folder_maintenance_values = ABSPATH . 'bps-maintenance-values.php';
 $bps_maintenance_values = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/bps-maintenance-values.php';
 $pattern = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*(.*)\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+# BPS .52.5: new pattern|new IfModule conditions
 $pattern2 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
+$pattern3 = '/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP(.*\s*){8}(Allow(.*)\s*){1,}<\/IfModule>\s*<\/IfModule>\s*#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/';
 $wpadminHtaccess = ABSPATH . 'wp-admin/.htaccess';
 $permsHtaccess = @substr(sprintf('%o', fileperms($wpadminHtaccess)), -4);
 $MMindexMaster = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/maintenance-mode-index-MU.php';
@@ -1811,20 +1905,25 @@ $MMindexMaster = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/maintenan
 		
 		if ( preg_match( $pattern2, $stringReplace, $matches ) ) {
 				
-			$stringReplace = preg_replace('/#\sBEGIN\sBPS\sMAINTENANCE\sMODE\sIP\s*Order(.*)\s*(Allow(.*)\s*){1,}#\sEND\sBPS\sMAINTENANCE\sMODE\sIP/', "", $stringReplace);	
+			$stringReplace = preg_replace( $pattern2, "", $stringReplace);
+		}
 
-			if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
-			
-				if ( $lock == '0404') {	
-					@chmod($wpadminHtaccess, 0404);
-				}				
+		if ( preg_match( $pattern3, $stringReplace, $matches ) ) {
 				
-				echo $bps_topDiv;
-				$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
-				echo $text;
-    			echo $bps_bottomDiv;
-			}
-		}			
+			$stringReplace = preg_replace( $pattern3, "", $stringReplace );
+		}
+
+		if ( file_put_contents($wpadminHtaccess, $stringReplace) ) {
+
+			if ( $lock == '0404') {	
+				@chmod($wpadminHtaccess, 0404);
+			}	
+			
+			echo $bps_topDiv;
+			$text = '<font color="green"><strong>'.__('BackEnd Maintenance Mode has been Turned Off.', 'bulletproof-security').'</strong></font>';
+			echo $text;
+    		echo $bps_bottomDiv;
+		}	
 	}
 }
 

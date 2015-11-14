@@ -76,14 +76,20 @@ function bpsPro_Core_LSM_deny_all() {
 
 	if ( is_admin() && wp_script_is( 'bps-accordion', $list = 'queue' ) && current_user_can('manage_options') ) {
 		
-		$denyall_content = "Order Deny,Allow\nDeny from all\nAllow from " . bpsPro_get_real_ip_address_lsm();
+		$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');
+		
+		if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {	
+	
+			$denyall_content = "# BPS mod_authz_core IfModule BC\n<IfModule mod_authz_core.c>\nRequire ip ". bpsPro_get_real_ip_address_lsm()."\n</IfModule>\n\n<IfModule !mod_authz_core.c>\n<IfModule mod_access_compat.c>\n<FilesMatch \"(.*)\$\">\nOrder Allow,Deny\nAllow from ". bpsPro_get_real_ip_address_lsm()."\n</FilesMatch>\n</IfModule>\n</IfModule>";
+	
+		} else {
+		
+			$denyall_content = "# BPS mod_access_compat\n<FilesMatch \"(.*)\$\">\nOrder Allow,Deny\nAllow from ". bpsPro_get_real_ip_address_lsm()."\n</FilesMatch>";		
+		}		
+		
 		$create_denyall_htaccess_file = WP_PLUGIN_DIR . '/bulletproof-security/admin/login/.htaccess';
 		$check_string = @file_get_contents($create_denyall_htaccess_file);
 		
-		if ( file_exists($create_denyall_htaccess_file) && strpos( $check_string, bpsPro_get_real_ip_address_lsm() ) ) {
-			return;
-		}
-
 		if ( ! file_exists($create_denyall_htaccess_file) ) { 
 
 			$handle = fopen( $create_denyall_htaccess_file, 'w+b' );
@@ -102,8 +108,8 @@ bpsPro_Core_LSM_deny_all();
 
 ?>
 
-<h2 style="margin-left:70px;"><?php _e('BulletProof Security ~ Login Security & Monitoring', 'bulletproof-security'); ?></h2>
-<div id="message" class="updated" style="border:1px solid #999999; margin-left:70px;background-color: #000;">
+<h2 style="margin-left:220px;"><?php _e('BulletProof Security ~ Login Security & Monitoring', 'bulletproof-security'); ?></h2>
+<div id="message" class="updated" style="border:1px solid #999999; margin-left:220px;background-color: #000;">
 
 <?php
 // HUD - Heads Up Display - Warnings and Error messages
@@ -112,7 +118,6 @@ echo bps_hud_check_bpsbackup();
 echo bps_check_safemode();
 echo @bps_w3tc_htaccess_check($plugin_var);
 echo @bps_wpsc_htaccess_check($plugin_var);
-bps_delete_language_files();
 
 // General all purpose "Settings Saved." message for forms
 if ( current_user_can('manage_options') && wp_script_is( 'bps-accordion', $list = 'queue' ) ) {
@@ -129,7 +134,7 @@ $bps_plugin_dir = str_replace( ABSPATH, '', WP_PLUGIN_DIR );
 // Replace ABSPATH = wp-content
 $bps_wpcontent_dir = str_replace( ABSPATH, '', WP_CONTENT_DIR );
 // Top div & bottom div echo
-$bps_topDiv = '<div id="message" class="updated" style="background-color:#ffffe0;font-size:1em;font-weight:bold;border:1px solid #999999; margin-left:70px;"><p>';
+$bps_topDiv = '<div id="message" class="updated" style="background-color:#ffffe0;font-size:1em;font-weight:bold;border:1px solid #999999; margin-left:220px;"><p>';
 $bps_bottomDiv = '</p></div>';
 
 if ( ! current_user_can('manage_options') ) { 
@@ -146,7 +151,7 @@ if ( ! current_user_can('manage_options') ) {
 
 <!-- jQuery UI Tab Menu -->
 <div id="bps-tabs" class="bps-menu">
-    <div id="bpsHead" style="position:relative; top:0px; left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.png'); ?>" style="float:left; padding:0px 8px 0px 0px; margin:-72px 0px 0px 0px;" /></div>
+    <div id="bpsHead" style="position:relative; top:0px; left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.gif'); ?>" style="float:left; padding:0px 8px 0px 0px; margin:-72px 0px 0px 0px;" /></div>
 		<ul>
 			<li><a href="#bps-tabs-1"><?php _e('Login Security & Monitoring', 'bulletproof-security'); ?></a></li>
  			<?php if ( is_multisite() && $blog_id != 1 ) { ?>
@@ -616,6 +621,23 @@ if ( isset( $_POST['Submit-Login-Security-search'] ) && current_user_can('manage
 	}
 ?>
 <br />
+
+<?php
+$UIoptions = get_option('bulletproof_security_options_theme_skin');
+
+if ( $UIoptions['bps_ui_theme_skin'] == 'blue' ) {
+?>
+<br />
+
+<script type="text/javascript">
+/* <![CDATA[ */
+jQuery(document).ready(function($) {
+	$( "#LoginSecurityCheckall tr:odd" ).css( "background-color", "#f9f9f9" );
+});
+/* ]]> */
+</script>
+
+<?php } ?>
 
 <script type="text/javascript">
 /* <![CDATA[ */

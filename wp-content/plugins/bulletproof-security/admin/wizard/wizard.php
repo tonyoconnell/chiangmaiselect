@@ -58,12 +58,16 @@ require_once( ABSPATH . 'wp-admin/includes/plugin-install.php' );
 }
 ?>
 
-<div id="message" class="updated" style="border:1px solid #999999;margin-left:70px;background-color:#000;">
+<div id="message" class="updated" style="border:1px solid #999999;margin-left:220px;background-color:#000;">
 
 <?php
 
 $bps_wpcontent_dir = str_replace( ABSPATH, '', WP_CONTENT_DIR );
 $bpsSpacePop = '-------------------------------------------------------------';
+
+require_once( WP_PLUGIN_DIR . '/bulletproof-security/admin/wizard/wizard-backup.php' );
+
+bpsPro_root_precheck_download();
 
 function bpsPro_network_domain_check_wizard() {
 	global $wpdb;
@@ -119,6 +123,7 @@ $failTextEnd = '</strong></font><br>';
 	}
 
 $BPSCustomCodeOptions = get_option('bulletproof_security_options_customcode');
+$Apache_Mod_options = get_option('bulletproof_security_options_apache_modules');
 $bps_get_wp_root_secure = bps_wp_get_root_folder();
 $bps_auto_write_secure_file = WP_PLUGIN_DIR . '/bulletproof-security/admin/htaccess/secure.htaccess';
 $bps_auto_write_secure_file_root = ABSPATH . '.htaccess';
@@ -399,19 +404,50 @@ RewriteRule . " . $bps_get_wp_root_secure . "index.php [L]
 # WP REWRITE LOOP END\n";
 
 if ( $BPSCustomCodeOptions['bps_customcode_deny_files'] != '' ) {        
-$bps_secure_deny_browser_access = "# CUSTOM CODE DENY BROWSER ACCESS TO THESE FILES\n" . htmlspecialchars_decode( $BPSCustomCodeOptions['bps_customcode_deny_files'], ENT_QUOTES ) . "\n\n";
+$bps_secure_deny_browser_access = "\n# CUSTOM CODE DENY BROWSER ACCESS TO THESE FILES\n" . htmlspecialchars_decode( $BPSCustomCodeOptions['bps_customcode_deny_files'], ENT_QUOTES ) . "\n\n";
+
 } else {
-$bps_secure_deny_browser_access = "\n# DENY BROWSER ACCESS TO THESE FILES 
+
+	if ( $Apache_Mod_options['bps_apache_mod_ifmodule'] == 'Yes' ) {	
+	
+		$bps_secure_deny_browser_access = "\n# DENY BROWSER ACCESS TO THESE FILES 
 # Use BPS Custom Code to modify/edit/change this code and to save it permanently.
 # wp-config.php, bb-config.php, php.ini, php5.ini, readme.html
-# Replace 88.77.66.55 with your current IP address and remove the  
-# pound sign # in front of the Allow from line of code below to be able to access
-# any of these files directly from your Browser.\n
-<FilesMatch ".'"'."^(wp-config\.php|php\.ini|php5\.ini|readme\.html|bb-config\.php)".'"'.">
+# To be able to view these files from a Browser, replace 127.0.0.1 with your actual 
+# current IP address. Comment out: #Require all denied and Uncomment: Require ip 127.0.0.1
+# Comment out: #Deny from all and Uncomment: Allow from 127.0.0.1 
+# Note: The BPS System Info page displays which modules are loaded on your server. 
+
+<FilesMatch \"^(wp-config\.php|php\.ini|php5\.ini|readme\.html|bb-config\.php)\">
+<IfModule mod_authz_core.c>
+Require all denied
+#Require ip 127.0.0.1
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+<IfModule mod_access_compat.c>
 Order Allow,Deny
 Deny from all
-#Allow from 88.77.66.55
+#Allow from 127.0.0.1
+</IfModule>
+</IfModule>
 </FilesMatch>\n\n";
+	
+	} else {
+		
+		$bps_secure_deny_browser_access = "\n# DENY BROWSER ACCESS TO THESE FILES 
+# Use BPS Custom Code to modify/edit/change this code and to save it permanently.
+# wp-config.php, bb-config.php, php.ini, php5.ini, readme.html
+# To be able to view these files from a Browser, replace 127.0.0.1 with your actual 
+# current IP address. Comment out: #Deny from all and Uncomment: Allow from 127.0.0.1 
+# Note: The BPS System Info page displays which modules are loaded on your server. 
+
+<FilesMatch \"^(wp-config\.php|php\.ini|php5\.ini|readme\.html|bb-config\.php)\">
+Order Allow,Deny
+Deny from all
+#Allow from 127.0.0.1
+</FilesMatch>\n\n";		
+	}
 }
 
 // AutoMagic - CUSTOM CODE BOTTOM
@@ -950,7 +986,7 @@ $search = '';
 	$UserAgentRulesT = file_get_contents($userAgentMaster);
 	$stringReplace = file_get_contents($bps403File);
 
-	$stringReplace = preg_replace('/# BEGIN USERAGENT FILTER(.*)# END USERAGENT FILTER/s', "# BEGIN USERAGENT FILTER\nif ( !preg_match('/".trim($UserAgentRulesT, "|")."/', \$_SERVER['HTTP_USER_AGENT']) ) {\n# END USERAGENT FILTER", $stringReplace);
+	$stringReplace = preg_replace('/# BEGIN USERAGENT FILTER(.*)# END USERAGENT FILTER/s', "# BEGIN USERAGENT FILTER\nif ( @!preg_match('/".trim($UserAgentRulesT, "|")."/', \$_SERVER['HTTP_USER_AGENT']) ) {\n# END USERAGENT FILTER", $stringReplace);
 		
 	file_put_contents($bps403File, $stringReplace);
 		
@@ -1081,9 +1117,15 @@ switch ( $memoryLimit ) {
  	}
 	}
 
+	// BPS .52.6: Pre-save UI Theme Skin with Blue Theme if DB option does not exist
+	bpsPro_presave_ui_theme_skin_options();
+
 	// PHP/php.ini htaccess code pre-check - Check if root .htaccess file has php.ini handler code and if that code has been added to BPS Custom Code
 	bpsSetupWizardPhpiniHandlerCheck();
 	
+	// mod_authz_core forward/backward compatibility: create new htaccess files if needed
+	bpsPro_apache_mod_directive_check();
+
 	// writable checks:
 	// folders: /bps-backup/ and /htaccess/ folder
 	// files: default.htaccess, secure.htaccess and wpadmin-secure.htaccess
@@ -1367,6 +1409,19 @@ $failTextEnd = '</strong></font><br>';
 	echo '<div style="color:black;font-size:1.13em;font-weight:bold;margin-bottom:15px;">'.__('BulletProof Security Security Log User Agent Filter Setup', 'bulletproof-security').'</div>';
 	echo '<div id="SLuserAgentFilter" style="border-top:3px solid #999999;margin-top:-10px;"><p>';
 	bpsSetupWizard_autoupdate_useragent_filters();
+	
+	// .52.7: Set Security Log Limit POST Request Body Data option to checked/limited by default
+	$bps_seclog_post_limit_Options = 'bulletproof_security_options_sec_log_post_limit';			
+
+	$seclog_post_limit_Options = array( 'bps_security_log_post_limit' => '1' );
+			
+	if ( ! get_option( $bps_seclog_post_limit_Options ) ) {			
+		
+		foreach( $seclog_post_limit_Options as $key => $value ) {
+			update_option('bulletproof_security_options_sec_log_post_limit', $seclog_post_limit_Options);
+		}
+	}		
+	
 	echo '</p></div>';
 	
 	echo '<div style="color:black;font-size:1.13em;font-weight:bold;margin-bottom:15px;">'.__('BulletProof Security Email Alerting & Log File Options Setup', 'bulletproof-security').'</div>';
@@ -1496,7 +1551,7 @@ $failTextEnd = '</strong></font><br>';
 	
 	echo '</span>';
 
-	echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:70px;background-color:#ffffe0;"><p>';
+	echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:220px;background-color:#ffffe0;"><p>';
 	$text = '<strong><font color="green">'.__('The Setup Wizard has completed BPS Setup.', 'bulletproof-security').'<br>'.__('Check the "BPS Setup Verification & Error Checks" section below for any errors in Red Font.', 'bulletproof-security').'</font></strong><br>';
 	echo $text;
 	echo '</p></div>';
@@ -1505,7 +1560,7 @@ $failTextEnd = '</strong></font><br>';
 	$wizard_run_time = $time_end - $time_start;
 	$wizard_time_display = '<strong>'.__('Setup Wizard Completion Time: ', 'bulletproof-security').'</strong>'. round( $wizard_run_time, 2 ) . ' Seconds';	
 	
-	echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:70px;background-color:#ffffe0;"><p>';
+	echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:220px;background-color:#ffffe0;"><p>';
 	echo bpsPro_memory_resource_usage();
 	echo $wizard_time_display;
 	echo '</p></div>';
@@ -1520,11 +1575,11 @@ $failTextEnd = '</strong></font><br>';
 
 </div>
 
-<h2 style="margin-left:70px;"><?php _e('BulletProof Security ~ Setup Wizard', 'bulletproof-security'); ?></h2>
+<h2 style="margin-left:220px;"><?php _e('BulletProof Security ~ Setup Wizard', 'bulletproof-security'); ?></h2>
 
 <!-- jQuery UI Tab Menu -->
 <div id="bps-tabs" class="bps-menu">
-    <div id="bpsHead" style="position:relative;top:0px;left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.png'); ?>" style="float:left;padding:0px 8px 0px 0px;margin:-72px 0px 0px 0px;" />
+    <div id="bpsHead" style="position:relative;top:0px;left:0px;"><img src="<?php echo plugins_url('/bulletproof-security/admin/images/bps-security-shield.gif'); ?>" style="float:left;padding:0px 8px 0px 0px;margin:-72px 0px 0px 0px;" />
     
 <style>
 <!--
@@ -1700,7 +1755,7 @@ if ( isset( $_POST['Submit-Net-LSM'] ) && current_user_can('manage_options') ) {
 	if ( is_multisite() ) {
 	
 		if ( wp_is_large_network() ) {
-			echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:70px;background-color:#ffffe0;"><p>';
+			echo '<div id="message" class="updated" style="border:1px solid #999999;margin-left:220px;background-color:#ffffe0;"><p>';
 			$text = '<font color="red"><strong>'.__('Error: Your Network site exceeds the default WP criteria for a large network site. Either you have more than 10,000 users or more than 10,000 sites. Please post a new forum thread in the BPS plugin support forum on wordpress.org for assistance.', 'bulletproof-security').'</strong></font>';
 			echo $text;
 			echo '</p></div>';
